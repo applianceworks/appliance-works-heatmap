@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Appliance Works AZ — ZIP Heat Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #181c26;
+    --border: #1e2330;
+    --text: #eceef4;
+    --muted: #4e566a;
+    --accent: #f97316;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; }
+
+  header {
+    height: 50px; flex-shrink: 0;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; z-index: 1000;
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 19px; letter-spacing: 2.5px; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .logo-sub { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 1px; }
+  .hstats { display: flex; gap: 18px; }
+  .hstat { text-align: right; }
+  .hstat-v { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--text); font-weight: 500; }
+  .hstat-l { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+
+  .wrap { flex: 1; display: flex; overflow: hidden; }
+  #map { flex: 1; z-index: 1; }
+
+  .leaflet-control-attribution { background: rgba(13,15,20,0.85)!important; color: #4e566a!important; font-size: 9px!important; }
+  .leaflet-control-attribution a { color: #4e566a!important; }
+  .leaflet-control-zoom a { background: var(--surface)!important; color: var(--text)!important; border-color: var(--border)!important; }
+  .leaflet-control-zoom a:hover { background: var(--surface2)!important; }
+
+  .sidebar {
+    width: 280px; flex-shrink: 0;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; z-index: 1000;
+  }
+  .s-sec { padding: 13px 14px; border-bottom: 1px solid var(--border); }
+  .s-lbl { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 9px; }
+
+  .detail { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 13px; }
+  .d-zip { font-family: 'Bebas Neue', sans-serif; font-size: 40px; line-height: 1; letter-spacing: 2px; }
+  .d-city { font-size: 11px; color: var(--muted); margin-top: 1px; margin-bottom: 9px; }
+  .d-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .d-box { background: var(--surface); border-radius: 5px; padding: 7px 9px; }
+  .d-bl { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .d-bv { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; margin-top: 2px; }
+  .d-hint { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); text-align: center; padding: 16px 0; }
+
+  .leg-wrap { display: flex; align-items: center; gap: 7px; }
+  .leg-bar { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(to right, #1d4ed8, #16a34a, #ca8a04, #ea580c, #dc2626); }
+  .leg-l { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); }
+
+  .rank-scroll { flex: 1; overflow-y: auto; padding: 8px 10px; }
+  .rank-scroll::-webkit-scrollbar { width: 3px; }
+  .rank-scroll::-webkit-scrollbar-track { background: transparent; }
+  .rank-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .ri { display: flex; align-items: center; gap: 7px; padding: 6px 7px; border-radius: 5px; cursor: pointer; transition: background 0.1s; margin-bottom: 2px; border: 1px solid transparent; }
+  .ri:hover { background: var(--surface2); }
+  .ri.active { background: var(--surface2); border-color: var(--accent); }
+  .rn { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); width: 16px; text-align: right; flex-shrink: 0; }
+  .rd { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .rz { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); flex-shrink: 0; width: 46px; }
+  .rc { font-size: 10px; color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rr { text-align: right; flex-shrink: 0; }
+  .ra { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); font-weight: 500; }
+  .rb-w { height: 2px; background: var(--border); border-radius: 1px; margin-top: 2px; width: 48px; }
+  .rb-f { height: 100%; border-radius: 1px; }
+
+  .footer {
+    height: 26px; flex-shrink: 0;
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: 1px; gap: 10px;
+  }
+  .footer span { color: var(--accent); }
+
+  #loading {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 9999; gap: 14px;
+  }
+  .load-logo { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px; color: var(--accent); }
+  .load-logo span { color: var(--text); }
+  .load-msg { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+  .load-bar-wrap { width: 200px; height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+  .load-bar { height: 100%; background: var(--accent); border-radius: 1px; width: 0%; transition: width 0.4s ease; }
+
+  .leaflet-tooltip {
+    background: var(--surface)!important; border: 1px solid var(--border)!important;
+    border-radius: 8px!important; padding: 9px 13px!important; color: var(--text)!important;
+    font-family: 'DM Sans', sans-serif!important; box-shadow: 0 6px 24px rgba(0,0,0,0.6)!important;
+    pointer-events: none!important;
+  }
+  .leaflet-tooltip::before { display: none!important; }
+  .tt-z { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1.5px; line-height: 1; }
+  .tt-c { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+  .tt-r { display: flex; justify-content: space-between; gap: 14px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); line-height: 1.7; }
+  .tt-v { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="load-logo">Appliance Works <span>AZ</span></div>
+  <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
+  <div class="load-msg" id="load-msg">Fetching ZIP boundaries from Census Bureau…</div>
+</div>
+
+<header>
+  <div>
+    <div class="logo">Appliance Works <span>AZ</span></div>
+    <div class="logo-sub">ZIP Code Revenue Heat Map · Route Sheet Data</div>
+  </div>
+  <div class="hstats">
+    <div class="hstat"><div class="hstat-v" id="h-zips">—</div><div class="hstat-l">ZIP Codes</div></div>
+    <div class="hstat"><div class="hstat-v" id="h-jobs">—</div><div class="hstat-l">Paid Jobs</div></div>
+    <div class="hstat"><div class="hstat-v" id="h-rev">—</div><div class="hstat-l">Total Revenue</div></div>
+    <div class="hstat"><div class="hstat-v" id="h-avg">—</div><div class="hstat-l">Avg Ticket</div></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="map"></div>
+  <div class="sidebar">
+    <div class="s-sec">
+      <div class="s-lbl">Selected ZIP</div>
+      <div class="detail" id="detail"><div class="d-hint">← Click a ZIP on the map</div></div>
+    </div>
+    <div class="s-sec">
+      <div class="s-lbl">Color Scale — Avg Ticket</div>
+      <div class="leg-wrap">
+        <span class="leg-l" id="leg-min">—</span>
+        <div class="leg-bar"></div>
+        <span class="leg-l" id="leg-max">—</span>
+      </div>
+    </div>
+    <div class="s-sec" style="flex:1;overflow:hidden;display:flex;flex-direction:column;padding-bottom:0;">
+      <div class="s-lbl">All ZIPs Ranked by Avg Ticket</div>
+      <div class="rank-scroll" id="rank-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>LIVE DATA</span> · Route Sheet 04/02/2026 · 216 paid jobs · $0 jobs excluded · <span>Census TIGER Boundaries</span> · OpenStreetMap
+</div>
+
+<script>
+// ── REAL DATA from Route_Sheet.xlsx ($0 jobs excluded) ────────────────────────
+const zipData = [
+  {zip:"85262",city:"Scottsdale",       avgTicket:1494,jobs:1, totalRevenue:1493.55},
+  {zip:"85132",city:"Florence",         avgTicket:807, jobs:1, totalRevenue:806.64},
+  {zip:"85286",city:"Chandler",         avgTicket:677, jobs:1, totalRevenue:677.00},
+  {zip:"85040",city:"Phoenix",          avgTicket:667, jobs:1, totalRevenue:667.24},
+  {zip:"85018",city:"Phoenix",          avgTicket:614, jobs:1, totalRevenue:614.25},
+  {zip:"85226",city:"Chandler",         avgTicket:606, jobs:2, totalRevenue:1211.68},
+  {zip:"85050",city:"Phoenix",          avgTicket:490, jobs:4, totalRevenue:1960.76},
+  {zip:"85253",city:"Paradise Valley",  avgTicket:465, jobs:7, totalRevenue:3252.95},
+  {zip:"85194",city:"Casa Grande",      avgTicket:436, jobs:4, totalRevenue:1744.93},
+  {zip:"85006",city:"Phoenix",          avgTicket:421, jobs:2, totalRevenue:841.78},
+  {zip:"85122",city:"Casa Grande",      avgTicket:374, jobs:8, totalRevenue:2989.21},
+  {zip:"85032",city:"Phoenix",          avgTicket:373, jobs:3, totalRevenue:1119.10},
+  {zip:"85028",city:"Phoenix",          avgTicket:364, jobs:3, totalRevenue:1090.86},
+  {zip:"85255",city:"Scottsdale",       avgTicket:358, jobs:3, totalRevenue:1075.42},
+  {zip:"85249",city:"Chandler",         avgTicket:351, jobs:1, totalRevenue:350.60},
+  {zip:"85051",city:"Phoenix",          avgTicket:338, jobs:2, totalRevenue:676.04},
+  {zip:"85266",city:"Scottsdale",       avgTicket:334, jobs:4, totalRevenue:1337.54},
+  {zip:"85373",city:"Sun City",         avgTicket:323, jobs:3, totalRevenue:967.68},
+  {zip:"85012",city:"Phoenix",          avgTicket:322, jobs:2, totalRevenue:643.72},
+  {zip:"85326",city:"Buckeye",          avgTicket:319, jobs:1, totalRevenue:319.25},
+  {zip:"85027",city:"Phoenix",          avgTicket:316, jobs:1, totalRevenue:316.07},
+  {zip:"85024",city:"Phoenix",          avgTicket:314, jobs:1, totalRevenue:313.52},
+  {zip:"86315",city:"Prescott Valley",  avgTicket:309, jobs:1, totalRevenue:308.83},
+  {zip:"85296",city:"Gilbert",          avgTicket:308, jobs:4, totalRevenue:1230.01},
+  {zip:"85382",city:"Peoria",           avgTicket:306, jobs:1, totalRevenue:305.78},
+  {zip:"85138",city:"Maricopa",         avgTicket:301, jobs:7, totalRevenue:2107.37},
+  {zip:"85375",city:"Sun City West",    avgTicket:299, jobs:5, totalRevenue:1494.74},
+  {zip:"85374",city:"Surprise",         avgTicket:297, jobs:1, totalRevenue:297.14},
+  {zip:"85257",city:"Scottsdale",       avgTicket:293, jobs:4, totalRevenue:1171.57},
+  {zip:"85207",city:"Mesa",             avgTicket:293, jobs:1, totalRevenue:293.02},
+  {zip:"86329",city:"Humboldt",         avgTicket:290, jobs:1, totalRevenue:289.70},
+  {zip:"85392",city:"Avondale",         avgTicket:289, jobs:1, totalRevenue:288.93},
+  {zip:"85021",city:"Phoenix",          avgTicket:286, jobs:3, totalRevenue:857.88},
+  {zip:"85284",city:"Tempe",            avgTicket:281, jobs:1, totalRevenue:280.97},
+  {zip:"85131",city:"Eloy",             avgTicket:281, jobs:2, totalRevenue:561.74},
+  {zip:"85251",city:"Scottsdale",       avgTicket:280, jobs:3, totalRevenue:841.39},
+  {zip:"85022",city:"Phoenix",          avgTicket:278, jobs:1, totalRevenue:278.02},
+  {zip:"85142",city:"Queen Creek",      avgTicket:278, jobs:1, totalRevenue:277.70},
+  {zip:"85308",city:"Glendale",         avgTicket:262, jobs:3, totalRevenue:787.10},
+  {zip:"85044",city:"Phoenix",          avgTicket:260, jobs:6, totalRevenue:1560.70},
+  {zip:"85396",city:"Buckeye",          avgTicket:260, jobs:3, totalRevenue:779.33},
+  {zip:"85379",city:"Surprise",         avgTicket:247, jobs:4, totalRevenue:987.17},
+  {zip:"85331",city:"Cave Creek",       avgTicket:242, jobs:4, totalRevenue:969.86},
+  {zip:"85140",city:"Queen Creek",      avgTicket:241, jobs:2, totalRevenue:481.40},
+  {zip:"85383",city:"Peoria",           avgTicket:238, jobs:9, totalRevenue:2145.93},
+  {zip:"86305",city:"Prescott",         avgTicket:237, jobs:6, totalRevenue:1419.37},
+  {zip:"86323",city:"Chino Valley",     avgTicket:234, jobs:2, totalRevenue:468.03},
+  {zip:"85254",city:"Scottsdale",       avgTicket:222, jobs:2, totalRevenue:444.42},
+  {zip:"85259",city:"Scottsdale",       avgTicket:216, jobs:3, totalRevenue:648.66},
+  {zip:"86301",city:"Prescott",         avgTicket:213, jobs:11,totalRevenue:2341.34},
+  {zip:"85355",city:"Waddell",          avgTicket:192, jobs:2, totalRevenue:384.12},
+  {zip:"86327",city:"Prescott Valley",  avgTicket:191, jobs:2, totalRevenue:382.70},
+  {zip:"86303",city:"Prescott",         avgTicket:188, jobs:3, totalRevenue:562.70},
+  {zip:"85016",city:"Phoenix",          avgTicket:187, jobs:2, totalRevenue:373.03},
+  {zip:"85020",city:"Phoenix",          avgTicket:177, jobs:5, totalRevenue:882.92},
+  {zip:"86334",city:"Paulden",          avgTicket:175, jobs:1, totalRevenue:175.00},
+  {zip:"85041",city:"Phoenix",          avgTicket:175, jobs:1, totalRevenue:175.00},
+  {zip:"85210",city:"Mesa",             avgTicket:166, jobs:2, totalRevenue:332.03},
+  {zip:"85085",city:"Phoenix",          avgTicket:166, jobs:4, totalRevenue:663.79},
+  {zip:"85083",city:"Phoenix",          avgTicket:157, jobs:3, totalRevenue:471.20},
+  {zip:"85086",city:"Phoenix",          avgTicket:148, jobs:4, totalRevenue:591.04},
+  {zip:"85014",city:"Phoenix",          avgTicket:138, jobs:4, totalRevenue:550.00},
+  {zip:"85225",city:"Chandler",         avgTicket:130, jobs:2, totalRevenue:260.00},
+  {zip:"85233",city:"Gilbert",          avgTicket:120, jobs:1, totalRevenue:120.00},
+  {zip:"85351",city:"Sun City",         avgTicket:109, jobs:6, totalRevenue:655.00},
+  {zip:"85260",city:"Scottsdale",       avgTicket:95,  jobs:2, totalRevenue:190.00},
+  {zip:"85015",city:"Phoenix",          avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85119",city:"Apache Junction",  avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85123",city:"Arizona City",     avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85139",city:"Maricopa",         avgTicket:95,  jobs:4, totalRevenue:380.00},
+  {zip:"85224",city:"Chandler",         avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85234",city:"Gilbert",          avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85250",city:"Scottsdale",       avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85212",city:"Mesa",             avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85205",city:"Mesa",             avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85208",city:"Mesa",             avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85209",city:"Mesa",             avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85304",city:"Glendale",         avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85338",city:"Goodyear",         avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85297",city:"Gilbert",          avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85335",city:"El Mirage",        avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"86314",city:"Prescott Valley",  avgTicket:95,  jobs:1, totalRevenue:95.00},
+  {zip:"85283",city:"Tempe",            avgTicket:95,  jobs:2, totalRevenue:190.00},
+  {zip:"85282",city:"Tempe",            avgTicket:90,  jobs:2, totalRevenue:180.00},
+  {zip:"85043",city:"Phoenix",          avgTicket:85,  jobs:1, totalRevenue:85.00},
+];
+
+const GEOJSON_SOURCES = [
+  {
+    label: "Census TIGERweb",
+    url: "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/PUMA_TAD_TAZ_UGA_ZCTA/MapServer/2/query?where=STATE%3D'04'&outFields=ZCTA5CE10&outSR=4326&f=geojson&resultRecordCount=1000"
+  },
+  {
+    label: "OpenDataDE (Census mirror)",
+    url: "https://raw.githubusercontent.com/OpenDataDE/State-zip-code-GeoJSON/master/az_arizona_zip_codes_geo.min.json"
+  }
+];
+
+const byZip = {};
+zipData.forEach(d => byZip[d.zip] = d);
+const ourZips = new Set(zipData.map(d => d.zip));
+const sorted = [...zipData].sort((a,b) => b.avgTicket - a.avgTicket);
+const maxT = sorted[0].avgTicket, minT = sorted[sorted.length-1].avgTicket;
+const totalJobs = zipData.reduce((s,d) => s+d.jobs, 0);
+const totalRev = zipData.reduce((s,d) => s+d.totalRevenue, 0);
+const overallAvg = Math.round(totalRev / totalJobs);
+
+document.getElementById('h-zips').textContent = zipData.length;
+document.getElementById('h-jobs').textContent = totalJobs;
+document.getElementById('h-rev').textContent = '$' + Math.round(totalRev).toLocaleString();
+document.getElementById('h-avg').textContent = '$' + overallAvg;
+document.getElementById('leg-min').textContent = '$' + minT;
+document.getElementById('leg-max').textContent = '$' + maxT.toLocaleString();
+
+function ticketColor(val) {
+  const t = (val - minT) / (maxT - minT);
+  const stops = [[0,[29,78,216]],[0.25,[22,163,74]],[0.5,[202,138,4]],[0.75,[234,88,12]],[1,[220,38,38]]];
+  let i = 0; while (i < stops.length-2 && t > stops[i+1][0]) i++;
+  const [t0,c0] = stops[i], [t1,c1] = stops[i+1];
+  const f = Math.max(0, Math.min(1, (t-t0)/(t1-t0)));
+  const r = Math.round(c0[0]+f*(c1[0]-c0[0])), g = Math.round(c0[1]+f*(c1[1]-c0[1])), b = Math.round(c0[2]+f*(c1[2]-c0[2]));
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+const map = L.map('map', { center:[33.5,-111.9], zoom:9, zoomControl:true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+const loadBar = document.getElementById('load-bar');
+const loadMsg = document.getElementById('load-msg');
+function setProgress(pct, msg) { loadBar.style.width = pct+'%'; if (msg) loadMsg.textContent = msg; }
+
+async function fetchWithFallback(sources) {
+  for (let i = 0; i < sources.length; i++) {
+    const src = sources[i];
+    try {
+      setProgress(20 + i*30, `Trying ${src.label}…`);
+      const res = await fetch(src.url, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.features || data.features.length === 0) throw new Error('Empty GeoJSON');
+      setProgress(80, `Loaded from ${src.label}`);
+      return { data, label: src.label };
+    } catch(e) {
+      console.warn(`Source failed: ${src.label}`, e.message);
+    }
+  }
+  return null;
+}
+
+const polygonLayers = {};
+let selectedZip = null;
+
+function getZipFromFeature(f) {
+  const p = f.properties;
+  return p.ZCTA5CE10 || p.GEOID10 || p.GEOID || p.zip_code || p.ZCTA5 || null;
+}
+
+function renderGeoJSON(geojson) {
+  const filtered = {
+    type: 'FeatureCollection',
+    features: geojson.features.filter(f => ourZips.has(getZipFromFeature(f)))
+  };
+
+  L.geoJSON(filtered, {
+    style: feature => {
+      const zip = getZipFromFeature(feature);
+      const d = byZip[zip];
+      if (!d) return { fillOpacity:0, opacity:0 };
+      const col = ticketColor(d.avgTicket);
+      return { fillColor:col, fillOpacity:0.55, color:col, weight:1.5, opacity:0.85 };
+    },
+    onEachFeature: (feature, layer) => {
+      const zip = getZipFromFeature(feature);
+      const d = byZip[zip];
+      if (!d) return;
+      const col = ticketColor(d.avgTicket);
+
+      layer.bindTooltip(`
+        <div class="tt-z" style="color:${col}">${zip}</div>
+        <div class="tt-c">${d.city}</div>
+        <div class="tt-r"><span>Avg Ticket</span><span class="tt-v">$${d.avgTicket.toLocaleString()}</span></div>
+        <div class="tt-r"><span>Paid Jobs</span><span class="tt-v">${d.jobs}</span></div>
+        <div class="tt-r"><span>Total Revenue</span><span class="tt-v">$${d.totalRevenue.toLocaleString()}</span></div>
+      `, { sticky:true, opacity:1, className:'' });
+
+      layer.on({
+        click: () => selectZip(zip),
+        mouseover: e => { if (zip !== selectedZip) e.target.setStyle({ fillOpacity:0.75, weight:2.5 }); },
+        mouseout:  e => { if (zip !== selectedZip) e.target.setStyle({ fillOpacity:0.55, weight:1.5 }); }
+      });
+
+      polygonLayers[zip] = { layer, col };
+    }
+  }).addTo(map);
+
+  buildRankList();
+  selectZip(sorted[0].zip);
+
+  const allLayers = Object.values(polygonLayers).map(x => x.layer);
+  if (allLayers.length > 0) {
+    map.fitBounds(L.featureGroup(allLayers).getBounds(), { padding:[30,30] });
+  }
+
+  setProgress(100, 'Done!');
+  setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 400);
+}
+
+function selectZip(zip) {
+  if (selectedZip && polygonLayers[selectedZip]) {
+    const prev = polygonLayers[selectedZip];
+    prev.layer.setStyle({ fillOpacity:0.55, weight:1.5, opacity:0.85, color:prev.col });
+  }
+  selectedZip = zip;
+  if (!polygonLayers[zip]) return;
+  const { layer, col } = polygonLayers[zip];
+  layer.setStyle({ fillOpacity:0.8, weight:3, opacity:1, color:'#ffffff' });
+  layer.bringToFront();
+
+  const d = byZip[zip];
+  const rank = sorted.findIndex(x => x.zip === zip) + 1;
+  const pct = Math.round((d.avgTicket - minT) / (maxT - minT) * 100);
+
+  document.getElementById('detail').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="d-zip" style="color:${col}">${zip}</div>
+        <div class="d-city">${d.city}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px">RANK</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;line-height:1">#${rank}</div>
+      </div>
+    </div>
+    <div class="d-grid">
+      <div class="d-box"><div class="d-bl">Avg Ticket</div><div class="d-bv" style="color:${col}">$${d.avgTicket.toLocaleString()}</div></div>
+      <div class="d-box"><div class="d-bl">Paid Jobs</div><div class="d-bv">${d.jobs}</div></div>
+      <div class="d-box"><div class="d-bl">Total Revenue</div><div class="d-bv">$${d.totalRevenue.toLocaleString()}</div></div>
+      <div class="d-box"><div class="d-bl">Heat Score</div><div class="d-bv">${pct}%</div></div>
+    </div>`;
+
+  document.querySelectorAll('.ri').forEach(el => el.classList.remove('active'));
+  const ri = document.getElementById('rank-'+zip);
+  if (ri) { ri.classList.add('active'); ri.scrollIntoView({ block:'nearest', behavior:'smooth' }); }
+}
+
+function buildRankList() {
+  const rankList = document.getElementById('rank-list');
+  rankList.innerHTML = '';
+  sorted.forEach((d, i) => {
+    const col = ticketColor(d.avgTicket);
+    const pct = Math.round((d.avgTicket - minT) / (maxT - minT) * 100);
+    const el = document.createElement('div');
+    el.className = 'ri'; el.id = 'rank-' + d.zip;
+    el.innerHTML = `
+      <span class="rn">${i+1}</span>
+      <span class="rd" style="background:${col}"></span>
+      <span class="rz">${d.zip}</span>
+      <span class="rc">${d.city}</span>
+      <div class="rr">
+        <div class="ra">$${d.avgTicket.toLocaleString()}</div>
+        <div class="rb-w"><div class="rb-f" style="width:${pct}%;background:${col}"></div></div>
+      </div>`;
+    el.addEventListener('click', () => {
+      if (polygonLayers[d.zip]) {
+        map.fitBounds(polygonLayers[d.zip].layer.getBounds(), { padding:[40,40], maxZoom:13, animate:true });
+      }
+      selectZip(d.zip);
+    });
+    rankList.appendChild(el);
+  });
+}
+
+(async () => {
+  setProgress(10, 'Connecting to Census Bureau…');
+  const result = await fetchWithFallback(GEOJSON_SOURCES);
+  if (result) {
+    renderGeoJSON(result.data);
+  } else {
+    loadMsg.textContent = 'Could not load boundaries. Check connection and refresh.';
+    loadBar.style.background = '#dc2626';
+    setProgress(100);
+    setTimeout(() => {
+      document.getElementById('loading').style.display = 'none';
+      buildRankList();
+    }, 2000);
+  }
+})();
+</script>
+</body>
+</html>
